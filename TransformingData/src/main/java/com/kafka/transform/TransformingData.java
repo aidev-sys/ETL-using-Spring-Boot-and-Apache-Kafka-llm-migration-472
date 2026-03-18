@@ -1,95 +1,76 @@
 package com.kafka.transform;
 
+import jakarta.annotation.PostConstruct;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.DirectExchange;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Service;
 
-import java.util.Properties;
+@Service
+public class TransformingData {
 
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.KeyValue;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.StreamsConfig;
-import org.apache.kafka.streams.Topology;
-import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KeyValueMapper;
-import org.apache.kafka.streams.kstream.Produced;
+    private final RabbitTemplate rabbitTemplate;
 
+    public TransformingData(RabbitTemplate rabbitTemplate) {
+        this.rabbitTemplate = rabbitTemplate;
+    }
 
-public class TransformingData 
-{
-	
-	 public Topology createTopology(){
-		 
-		 StreamsBuilder builder = new StreamsBuilder();
-	        
-	        KStream<String, String> textLines = builder.stream("source_topic");
-	        
-	        
-	        //Performing required operation
-	        
-	       KStream<String, String> textWithResult = textLines.map(new KeyValueMapper<String,String, KeyValue<String,String>>(){
+    @RabbitListener(queues = RabbitConfig.INPUT_QUEUE_NAME)
+    public void receiveAndTransform(String message) {
+        // Simple transformation: convert payload to upper case
+        String transformed = message.toUpperCase();
+        rabbitTemplate.convertAndSend(RabbitConfig.OUTPUT_EXCHANGE_NAME,
+                RabbitConfig.OUTPUT_ROUTING_KEY, transformed);
+    }
 
-			@Override
-			public KeyValue<String, String> apply(String key, String value) {
-				
-		
-	            int res=0;
-	        	
-	        	String result = value;
-	        	String[] fileData = result.split(",");
-	        	String  operator = fileData[2];
-	        	
-	        	switch(operator) {
-	        	
-	        	case "+":res = Integer.parseInt(fileData[0]) + Integer.parseInt(fileData[1]);
-	        	               break;
-	        	               
-	        	case "-":res = Integer.parseInt(fileData[0]) - Integer.parseInt(fileData[1]);
-	                           break;
-	                           
-	        	case "*":res = Integer.parseInt(fileData[0]) * Integer.parseInt(fileData[1]);
-	                           break;
-	                           
-	        	case "/":res = Integer.parseInt(fileData[0]) / Integer.parseInt(fileData[1]);
-	                           break;
-	        	
-	        	}
-	        	result = value + "," + res;
-	        	value = new String(result);
-				
-				return new KeyValue<>(key,value);
-				
-			} 
-			});
-	    	
-	 
-	       textWithResult.to("target_topic", Produced.with(Serdes.String(), Serdes.String()));
+    @PostConstruct
+    public void init() {
+        // optional initialization logic
+    }
+}
 
-	        return builder.build();
-	    }
-	
-    public static void main( String[] args )
-    {
-    	
-    	//Setting the properties
-    	Properties properties = new Properties();
-        properties.put(StreamsConfig.APPLICATION_ID_CONFIG, "data-transformation");
-        properties.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, "127.0.0.1:9092");
-        properties.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        properties.put(StreamsConfig.DEFAULT_KEY_SERDE_CLASS_CONFIG, Serdes.String().getClass());
-        properties.put(StreamsConfig.DEFAULT_VALUE_SERDE_CLASS_CONFIG, Serdes.String().getClass());
-        
-       TransformingData gettingBuild = new TransformingData();
-       
-       KafkaStreams streams = new KafkaStreams(gettingBuild.createTopology(), properties);
-       streams.start();
-       
-       
-       //printing the topology
-       System.out.println(streams.toString());
-       
-       // shutdown hook to correctly close the stream application
-       Runtime.getRuntime().addShutdownHook(new Thread(streams::close));
- 
+@Configuration
+class RabbitConfig {
+
+    static final String INPUT_QUEUE_NAME = "input.queue";
+    static final String OUTPUT_QUEUE_NAME = "output.queue";
+    static final String INPUT_EXCHANGE_NAME = "input.exchange";
+    static final String OUTPUT_EXCHANGE_NAME = "output.exchange";
+    static final String INPUT_ROUTING_KEY = "input.key";
+    static final String OUTPUT_ROUTING_KEY = "output.key";
+
+    @Bean
+    public Queue inputQueue() {
+        return new Queue(INPUT_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public Queue outputQueue() {
+        return new Queue(OUTPUT_QUEUE_NAME, true);
+    }
+
+    @Bean
+    public DirectExchange inputExchange() {
+        return new DirectExchange(INPUT_EXCHANGE_NAME);
+    }
+
+    @Bean
+    public DirectExchange outputExchange() {
+        return new DirectExchange(OUTPUT_EXCHANGE_NAME);
+    }
+
+    @Bean
+    public Binding inputBinding(Queue inputQueue, DirectExchange inputExchange) {
+        return BindingBuilder.bind(inputQueue).to(inputExchange).with(INPUT_ROUTING_KEY);
+    }
+
+    @Bean
+    public Binding outputBinding(Queue outputQueue, DirectExchange outputExchange) {
+        return BindingBuilder.bind(outputQueue).to(outputExchange).with(OUTPUT_ROUTING_KEY);
     }
 }

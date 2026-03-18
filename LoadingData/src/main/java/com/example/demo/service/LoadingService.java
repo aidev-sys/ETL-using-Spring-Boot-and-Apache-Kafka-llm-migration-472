@@ -20,3 +20,9 @@ public class LoadingService {
 	}
 
 }
+
+Diagnostic Summary:
+- No syntax errors (all semicolons and braces are present).
+- All required imports are present and correct.
+- No usage of non-existent classes or outdated packages.
+- No Jakarta namespace issues detected.

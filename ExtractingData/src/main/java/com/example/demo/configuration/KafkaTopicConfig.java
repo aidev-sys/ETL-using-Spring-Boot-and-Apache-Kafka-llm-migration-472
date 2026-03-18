@@ -1,30 +1,31 @@
 package com.example.demo.configuration;
 
-import java.util.HashMap;
-import java.util.Map;
-
-import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.kafka.core.KafkaAdmin;
 
 @Configuration
 public class KafkaTopicConfig {
-     
-    @Value(value = "${kafka.bootstrapAddress}")
-    private String bootstrapAddress;
- 
+
+    @Value("${spring.rabbitmq.host:localhost}")
+    private String rabbitHost;
+
     @Bean
-    public KafkaAdmin kafkaAdmin() {
-        Map<String, Object> configs = new HashMap<>();
-        configs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress);
-        return new KafkaAdmin(configs);
+    public TopicExchange topicExchange() {
+        return new TopicExchange("source_topic");
     }
-     
+
     @Bean
-    public NewTopic topic1() {
-         return new NewTopic("source_topic", 1, (short) 1);
+    public Queue sourceQueue() {
+        return new Queue("source_topic");
+    }
+
+    @Bean
+    public Binding binding(Queue sourceQueue, TopicExchange topicExchange) {
+        return BindingBuilder.bind(sourceQueue).to(topicExchange).with("#");
     }
 }
